@@ -9,7 +9,11 @@ import {
   getExitPosition,
   getAislePaths,
 } from "../utils/parkingData";
-import { findPath, findNearestAvailableSpot } from "../utils/pathfinding";
+import {
+  findPathToSpot,
+  findPathAlongAisles,
+  findNearestAvailableSpot,
+} from "../utils/pathfinding";
 
 const VEHICLE_COLORS = [0xff3333, 0xffffff, 0x222222, 0x3366ff, 0xc0c0c0];
 
@@ -627,7 +631,7 @@ export class ParkingScene {
 
     this.clearNavigationPath();
 
-    const path = findPath(
+    const path = findPathToSpot(
       this.entryPos.x,
       this.entryPos.z,
       spot,
@@ -719,7 +723,7 @@ export class ParkingScene {
 
     this.animatingVehicles.add(spotId);
 
-    const path = findPath(
+    const path = findPathToSpot(
       this.entryPos.x,
       this.entryPos.z,
       spot,
@@ -803,15 +807,21 @@ export class ParkingScene {
     this.animatingVehicles.add(spotId);
     this.vehicleMeshes.delete(spotId);
 
-    const path = findPath(
+    const path = findPathAlongAisles(
       spot.x,
       spot.z,
-      { ...spot, x: this.exitPos.x, z: this.exitPos.z } as ParkingSpot,
+      this.exitPos.x,
+      this.exitPos.z,
       this.aislePaths,
     );
 
-    path.reverse();
-    path.push({ x: this.exitPos.x, z: this.exitPos.z });
+    if (path.length < 2) {
+      this.scene.remove(vehicle);
+      this.animatingVehicles.delete(spotId);
+      this.updateSpotStatus(spotId, "available");
+      if (onComplete) onComplete();
+      return;
+    }
 
     const totalDistance = this.calculatePathLength(path);
     const speed = 8;

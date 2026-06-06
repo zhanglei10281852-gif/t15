@@ -96,11 +96,14 @@ const App: React.FC = () => {
     return () => clearInterval(simulateInterval);
   }, []);
 
+  const MIN_PARKING_DURATION = 30 * 1000;
+
   const simulateVehicleChanges = useCallback(() => {
     if (!sceneRef.current) return;
 
     const scene = sceneRef.current;
     const currentSpots = scene.getSpots();
+    const now = Date.now();
 
     const numChanges = Math.floor(Math.random() * 2) + 1;
 
@@ -109,7 +112,7 @@ const App: React.FC = () => {
 
       if (type < 0.5) {
         const availableSpots = currentSpots.filter(
-          (s) => s.status === "available",
+          (s) => s.status === "available" && !scene.isAnimating(s.id),
         );
 
         if (availableSpots.length > 0) {
@@ -117,27 +120,28 @@ const App: React.FC = () => {
             availableSpots[Math.floor(Math.random() * availableSpots.length)];
 
           const plateNumber = generatePlateNumber();
+          const entryTime = now;
 
           randomSpot.status = "occupied";
           randomSpot.plateNumber = plateNumber;
-          randomSpot.entryTime = Date.now();
+          randomSpot.entryTime = entryTime;
 
           scene.animateVehicleEntry(randomSpot.id);
         }
       } else {
-        const occupiedSpots = currentSpots.filter(
-          (s) =>
-            (s.status === "occupied" || s.status === "vip") &&
-            !scene.isAnimating(s.id),
-        );
+        const occupiedSpots = currentSpots.filter((s) => {
+          if (s.status !== "occupied" && s.status !== "vip") return false;
+          if (scene.isAnimating(s.id)) return false;
+          if (!s.entryTime) return false;
+          const parkingDuration = now - s.entryTime;
+          return parkingDuration >= MIN_PARKING_DURATION;
+        });
 
         if (occupiedSpots.length > 0) {
           const randomSpot =
             occupiedSpots[Math.floor(Math.random() * occupiedSpots.length)];
 
-          if (!scene.isAnimating(randomSpot.id)) {
-            scene.animateVehicleExit(randomSpot.id);
-          }
+          scene.animateVehicleExit(randomSpot.id);
         }
       }
     }

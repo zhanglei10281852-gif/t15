@@ -243,8 +243,8 @@ export function getAislePaths(): Array<{
   const groupDepth = 2 * spotDepth + aisleWidth;
   const groups = rows / 2;
 
-  for (let group = 0; group < groups - 1; group++) {
-    const z = (group + 1) * groupDepth - spotDepth - aisleWidth / 2;
+  for (let group = 0; group < groups; group++) {
+    const z = group * groupDepth + spotDepth + aisleWidth / 2;
     paths.push({
       x1: -halfWidth,
       z1: z,
@@ -254,7 +254,7 @@ export function getAislePaths(): Array<{
   }
 
   const bottomZ = -2;
-  const topZ = groups * groupDepth - 2 * spotDepth - aisleWidth + 2;
+  const topZ = groups * groupDepth + 2;
 
   paths.push({
     x1: -halfWidth,

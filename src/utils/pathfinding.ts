@@ -14,10 +14,10 @@ function heuristic(x1: number, z1: number, x2: number, z2: number): number {
   return Math.abs(x1 - x2) + Math.abs(z1 - z2);
 }
 
-function getNearestAislePoint(
+export function getNearestAislePoint(
   spotX: number,
   spotZ: number,
-  aislePaths: any[],
+  aislePaths: Array<{ x1: number; z1: number; x2: number; z2: number }>,
 ): { x: number; z: number } {
   let minDist = Infinity;
   let nearest = { x: spotX, z: spotZ };
@@ -50,7 +50,7 @@ function getNearestAislePoint(
 }
 
 function getAisleIntersections(
-  aislePaths: any[],
+  aislePaths: Array<{ x1: number; z1: number; x2: number; z2: number }>,
 ): Array<{ x: number; z: number }> {
   const intersections: Array<{ x: number; z: number }> = [];
   const horizontalPaths = aislePaths.filter((p) => p.z1 === p.z2);
@@ -75,7 +75,9 @@ function getAisleIntersections(
   return intersections;
 }
 
-function getPathNodes(aislePaths: any[]): Array<{ x: number; z: number }> {
+function getAllPathNodes(
+  aislePaths: Array<{ x1: number; z1: number; x2: number; z2: number }>,
+): Array<{ x: number; z: number }> {
   const nodes: Array<{ x: number; z: number }> = [];
 
   aislePaths.forEach((path) => {
@@ -96,9 +98,38 @@ function getPathNodes(aislePaths: any[]): Array<{ x: number; z: number }> {
   return nodes;
 }
 
+function isPointOnPath(
+  px: number,
+  pz: number,
+  x1: number,
+  z1: number,
+  x2: number,
+  z2: number,
+): boolean {
+  const tolerance = 0.5;
+
+  if (x1 === x2) {
+    const minZ = Math.min(z1, z2);
+    const maxZ = Math.max(z1, z2);
+    return (
+      Math.abs(px - x1) < tolerance &&
+      pz >= minZ - tolerance &&
+      pz <= maxZ + tolerance
+    );
+  } else {
+    const minX = Math.min(x1, x2);
+    const maxX = Math.max(x1, x2);
+    return (
+      Math.abs(pz - z1) < tolerance &&
+      px >= minX - tolerance &&
+      px <= maxX + tolerance
+    );
+  }
+}
+
 function getNeighbors(
   node: { x: number; z: number },
-  aislePaths: any[],
+  aislePaths: Array<{ x1: number; z1: number; x2: number; z2: number }>,
   allNodes: Array<{ x: number; z: number }>,
 ): Array<{ x: number; z: number; cost: number }> {
   const neighbors: Array<{ x: number; z: number; cost: number }> = [];
@@ -135,137 +166,6 @@ function getNeighbors(
   return neighbors;
 }
 
-function isPointOnPath(
-  px: number,
-  pz: number,
-  x1: number,
-  z1: number,
-  x2: number,
-  z2: number,
-): boolean {
-  const tolerance = 0.5;
-
-  if (x1 === x2) {
-    const minZ = Math.min(z1, z2);
-    const maxZ = Math.max(z1, z2);
-    return (
-      Math.abs(px - x1) < tolerance &&
-      pz >= minZ - tolerance &&
-      pz <= maxZ + tolerance
-    );
-  } else {
-    const minX = Math.min(x1, x2);
-    const maxX = Math.max(x1, x2);
-    return (
-      Math.abs(pz - z1) < tolerance &&
-      px >= minX - tolerance &&
-      px <= maxX + tolerance
-    );
-  }
-}
-
-export function findPath(
-  startX: number,
-  startZ: number,
-  targetSpot: ParkingSpot,
-  aislePaths: any[],
-): Array<{ x: number; z: number }> {
-  const targetAisle = getNearestAislePoint(
-    targetSpot.x,
-    targetSpot.z,
-    aislePaths,
-  );
-
-  const allNodes = getPathNodes(aislePaths);
-
-  const startNode = { x: startX, z: startZ };
-  const endAisleNode = { x: targetAisle.x, z: targetAisle.z };
-
-  allNodes.push(startNode);
-  allNodes.push(endAisleNode);
-
-  const openList: PathNode[] = [];
-  const closedSet = new Set<string>();
-
-  const start: PathNode = {
-    x: startX,
-    z: startZ,
-    g: 0,
-    h: heuristic(startX, startZ, targetAisle.x, targetAisle.z),
-    f: heuristic(startX, startZ, targetAisle.x, targetAisle.z),
-    parent: null,
-  };
-
-  openList.push(start);
-
-  while (openList.length > 0) {
-    openList.sort((a, b) => a.f - b.f);
-    const current = openList.shift()!;
-
-    const key = `${current.x.toFixed(2)},${current.z.toFixed(2)}`;
-    if (closedSet.has(key)) continue;
-    closedSet.add(key);
-
-    if (
-      Math.abs(current.x - targetAisle.x) < 1 &&
-      Math.abs(current.z - targetAisle.z) < 1
-    ) {
-      const path: Array<{ x: number; z: number }> = [];
-      let node: PathNode | null = current;
-      while (node) {
-        path.unshift({ x: node.x, z: node.z });
-        node = node.parent;
-      }
-
-      path.push({ x: targetSpot.x, z: targetSpot.z });
-
-      return simplifyPath(path);
-    }
-
-    const neighbors = getNeighbors(
-      { x: current.x, z: current.z },
-      aislePaths,
-      allNodes,
-    );
-
-    for (const neighbor of neighbors) {
-      const neighborKey = `${neighbor.x.toFixed(2)},${neighbor.z.toFixed(2)}`;
-      if (closedSet.has(neighborKey)) continue;
-
-      const g = current.g + neighbor.cost;
-      const h = heuristic(neighbor.x, neighbor.z, targetAisle.x, targetAisle.z);
-      const f = g + h;
-
-      const existingIndex = openList.findIndex(
-        (n) =>
-          Math.abs(n.x - neighbor.x) < 0.1 && Math.abs(n.z - neighbor.z) < 0.1,
-      );
-
-      if (existingIndex === -1 || g < openList[existingIndex].g) {
-        const newNode: PathNode = {
-          x: neighbor.x,
-          z: neighbor.z,
-          g,
-          h,
-          f,
-          parent: current,
-        };
-
-        if (existingIndex !== -1) {
-          openList[existingIndex] = newNode;
-        } else {
-          openList.push(newNode);
-        }
-      }
-    }
-  }
-
-  return [
-    { x: startX, z: startZ },
-    { x: targetSpot.x, z: targetSpot.z },
-  ];
-}
-
 function simplifyPath(
   path: Array<{ x: number; z: number }>,
 ): Array<{ x: number; z: number }> {
@@ -295,11 +195,134 @@ function simplifyPath(
   return result;
 }
 
+export function findPathAlongAisles(
+  startX: number,
+  startZ: number,
+  endX: number,
+  endZ: number,
+  aislePaths: Array<{ x1: number; z1: number; x2: number; z2: number }>,
+): Array<{ x: number; z: number }> {
+  const startAisle = getNearestAislePoint(startX, startZ, aislePaths);
+  const endAisle = getNearestAislePoint(endX, endZ, aislePaths);
+
+  const allNodes = getAllPathNodes(aislePaths);
+  allNodes.push(startAisle);
+  allNodes.push(endAisle);
+
+  const openList: PathNode[] = [];
+  const closedSet = new Set<string>();
+
+  const start: PathNode = {
+    x: startAisle.x,
+    z: startAisle.z,
+    g: 0,
+    h: heuristic(startAisle.x, startAisle.z, endAisle.x, endAisle.z),
+    f: heuristic(startAisle.x, startAisle.z, endAisle.x, endAisle.z),
+    parent: null,
+  };
+
+  openList.push(start);
+
+  while (openList.length > 0) {
+    openList.sort((a, b) => a.f - b.f);
+    const current = openList.shift()!;
+
+    const key = `${current.x.toFixed(2)},${current.z.toFixed(2)}`;
+    if (closedSet.has(key)) continue;
+    closedSet.add(key);
+
+    if (
+      Math.abs(current.x - endAisle.x) < 1 &&
+      Math.abs(current.z - endAisle.z) < 1
+    ) {
+      const path: Array<{ x: number; z: number }> = [];
+      let node: PathNode | null = current;
+      while (node) {
+        path.unshift({ x: node.x, z: node.z });
+        node = node.parent;
+      }
+
+      if (
+        Math.abs(startX - startAisle.x) > 0.1 ||
+        Math.abs(startZ - startAisle.z) > 0.1
+      ) {
+        path.unshift({ x: startX, z: startZ });
+      }
+
+      if (
+        Math.abs(endX - endAisle.x) > 0.1 ||
+        Math.abs(endZ - endAisle.z) > 0.1
+      ) {
+        path.push({ x: endX, z: endZ });
+      }
+
+      return simplifyPath(path);
+    }
+
+    const neighbors = getNeighbors(
+      { x: current.x, z: current.z },
+      aislePaths,
+      allNodes,
+    );
+
+    for (const neighbor of neighbors) {
+      const neighborKey = `${neighbor.x.toFixed(2)},${neighbor.z.toFixed(2)}`;
+      if (closedSet.has(neighborKey)) continue;
+
+      const g = current.g + neighbor.cost;
+      const h = heuristic(neighbor.x, neighbor.z, endAisle.x, endAisle.z);
+      const f = g + h;
+
+      const existingIndex = openList.findIndex(
+        (n) =>
+          Math.abs(n.x - neighbor.x) < 0.1 && Math.abs(n.z - neighbor.z) < 0.1,
+      );
+
+      if (existingIndex === -1 || g < openList[existingIndex].g) {
+        const newNode: PathNode = {
+          x: neighbor.x,
+          z: neighbor.z,
+          g,
+          h,
+          f,
+          parent: current,
+        };
+
+        if (existingIndex !== -1) {
+          openList[existingIndex] = newNode;
+        } else {
+          openList.push(newNode);
+        }
+      }
+    }
+  }
+
+  return [
+    { x: startX, z: startZ },
+    { x: endX, z: endZ },
+  ];
+}
+
+export function findPathToSpot(
+  startX: number,
+  startZ: number,
+  targetSpot: ParkingSpot,
+  aislePaths: Array<{ x1: number; z1: number; x2: number; z2: number }>,
+): Array<{ x: number; z: number }> {
+  return findPathAlongAisles(
+    startX,
+    startZ,
+    targetSpot.x,
+    targetSpot.z,
+    aislePaths,
+  );
+}
+
 export function findNearestAvailableSpot(
   spots: ParkingSpot[],
   entryX: number,
   entryZ: number,
-  aislePaths: any[],
+  aislePaths: Array<{ x1: number; z1: number; x2: number; z2: number }>,
 ): ParkingSpot | null {
   const availableSpots = spots.filter((s) => s.status === "available");
 
@@ -309,16 +332,14 @@ export function findNearestAvailableSpot(
   let minDistance = Infinity;
 
   availableSpots.forEach((spot) => {
-    const targetAisle = getNearestAislePoint(spot.x, spot.z, aislePaths);
-    const dist =
-      Math.sqrt(
-        Math.pow(targetAisle.x - entryX, 2) +
-          Math.pow(targetAisle.z - entryZ, 2),
-      ) +
-      Math.sqrt(
-        Math.pow(spot.x - targetAisle.x, 2) +
-          Math.pow(spot.z - targetAisle.z, 2),
+    const path = findPathToSpot(entryX, entryZ, spot, aislePaths);
+    let dist = 0;
+    for (let i = 0; i < path.length - 1; i++) {
+      dist += Math.sqrt(
+        Math.pow(path[i + 1].x - path[i].x, 2) +
+          Math.pow(path[i + 1].z - path[i].z, 2),
       );
+    }
 
     if (dist < minDistance) {
       minDistance = dist;
